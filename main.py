@@ -1,15 +1,16 @@
 import logging
 import os
-from flask import Flask
-from threading import Thread
+from flask import Flask, request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 import config
 import database as db
 
-# === Flask для здоровья (Render health check) ===
+# === Flask для health checks ===
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -20,18 +21,19 @@ def hello():
 def health():
     return "OK", 200
 
-def run_flask():
-    # Запускаем Flask сервер на порту Render
-    flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+@flask_app.route('/webhook', methods=['POST'])
+async def webhook_handler():
+    # Для webhook через Flask (упрощённо)
+    return "OK", 200
 
 # === Настройка бота ===
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
 
-# === Хендлеры бота ===
+# === Хендлеры ===
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
@@ -59,7 +61,8 @@ async def show_about(callback: types.CallbackQuery):
 
 @dp.message(Command("add_cat"))
 async def admin_add_cat(message: types.Message):
-    if message.from_user.id != config.ADMIN_ID: 
+    if message.from_user.id != config.ADMIN_ID:
+        await message.reply(f"❌ Доступ запрещён. Ваш ID: {message.from_user.id}")
         return
     try:
         parts = message.text.split(maxsplit=2)
@@ -72,7 +75,8 @@ async def admin_add_cat(message: types.Message):
 
 @dp.message(Command("add_offer"))
 async def admin_add_offer(message: types.Message):
-    if message.from_user.id != config.ADMIN_ID: 
+    if message.from_user.id != config.ADMIN_ID:
+        await message.reply(f"❌ Доступ запрещён. Ваш ID: {message.from_user.id}")
         return
     try:
         parts = message.text.split(maxsplit=1)[1].split("|")
@@ -86,7 +90,8 @@ async def admin_add_offer(message: types.Message):
 
 @dp.message(Command("add_code"))
 async def admin_add_code(message: types.Message):
-    if message.from_user.id != config.ADMIN_ID: 
+    if message.from_user.id != config.ADMIN_ID:
+        await message.reply(f"❌ Доступ запрещён. Ваш ID: {message.from_user.id}")
         return
     try:
         parts = message.text.split(maxsplit=1)[1].split("|")
@@ -99,20 +104,40 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
-# === Запуск ===
+# === Запуск с webhook ===
+async def on_startup(bot: Bot):
+    webhook_url = f"{config.WEBAPP_URL.replace('github.io', 'onrender.com')}/webhook"
+    await bot.set_webhook(webhook_url)
+    logger.info(f"Webhook установлен на {webhook_url}")
+
 async def main():
     db.init_db()
     logger.info("База данных инициализирована")
     
-    # Запускаем Flask в отдельном потоке (для health checks Render)
-    flask_thread = Thread(target=run_flask, daemon=True)
+    # Запускаем Flask
+    from threading import Thread
+    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080))), daemon=True)
     flask_thread.start()
     logger.info(f"Flask запущен на порту {os.environ.get('PORT', 8080)}")
     
-    # Запускаем бота через polling
-    await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("Бот запускается в режиме polling...")
-    await dp.start_polling(bot)
+    # Настройка webhook
+    await on_startup(bot)
+    
+    # Создаём aiohttp приложение для webhook
+    app = web.Application()
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+    setup_application(app, dp, bot=bot)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
+    await site.start()
+    
+    logger.info("Бот запущен в режиме webhook!")
+    
+    # Держим приложение запущенным
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     import asyncio
