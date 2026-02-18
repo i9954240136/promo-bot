@@ -6,31 +6,32 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
 import config
 import database as db
 
-# Настройка Flask для Render
+# === Flask для здоровья (Render health check) ===
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def hello():
-    return "Bot is running!"
+    return "Bot is running! ✅"
 
-@flask_app.route('/webhook', methods=['POST'])
-async def webhook():
-    return "OK"
+@flask_app.route('/health')
+def health():
+    return "OK", 200
 
 def run_flask():
+    # Запускаем Flask сервер на порту Render
     flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
-# Настройка бота
-logging.basicConfig(level=logging.INFO)
+# === Настройка бота ===
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
 
-# 🎯 Старт
+# === Хендлеры бота ===
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
@@ -44,7 +45,6 @@ async def cmd_start(message: types.Message):
         reply_markup=builder.as_markup()
     )
 
-# ℹ️ О боте
 @dp.callback_query(F.data == "about")
 async def show_about(callback: types.CallbackQuery):
     await callback.answer()
@@ -57,23 +57,23 @@ async def show_about(callback: types.CallbackQuery):
         parse_mode="HTML"
     )
 
-# 🔧 АДМИН: Добавить категорию
 @dp.message(Command("add_cat"))
 async def admin_add_cat(message: types.Message):
-    if message.from_user.id != config.ADMIN_ID: return
+    if message.from_user.id != config.ADMIN_ID: 
+        return
     try:
         parts = message.text.split(maxsplit=2)
         name = parts[1]
         emoji = parts[2] if len(parts) > 2 else "📦"
         db.add_category(name, emoji)
         await message.reply(f"✅ Категория '{name}' создана")
-    except:
-        await message.reply("❌ Ошибка. Формат: /add_cat Название 📦")
+    except Exception as e:
+        await message.reply(f"❌ Ошибка: {e}")
 
-# 🔧 АДМИН: Добавить офер
 @dp.message(Command("add_offer"))
 async def admin_add_offer(message: types.Message):
-    if message.from_user.id != config.ADMIN_ID: return
+    if message.from_user.id != config.ADMIN_ID: 
+        return
     try:
         parts = message.text.split(maxsplit=1)[1].split("|")
         cat_id = int(parts[0])
@@ -84,10 +84,10 @@ async def admin_add_offer(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
-# 🔧 АДМИН: Добавить промокод
 @dp.message(Command("add_code"))
 async def admin_add_code(message: types.Message):
-    if message.from_user.id != config.ADMIN_ID: return
+    if message.from_user.id != config.ADMIN_ID: 
+        return
     try:
         parts = message.text.split(maxsplit=1)[1].split("|")
         offer_id = int(parts[0])
@@ -99,20 +99,19 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
-# Запуск
-async def on_startup(bot: Bot):
-    logging.info("Бот запущен!")
-
+# === Запуск ===
 async def main():
     db.init_db()
+    logger.info("База данных инициализирована")
     
-    # Запускаем Flask в отдельном потоке
-    flask_thread = Thread(target=run_flask)
+    # Запускаем Flask в отдельном потоке (для health checks Render)
+    flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
+    logger.info(f"Flask запущен на порту {os.environ.get('PORT', 8080)}")
     
-    # Настройка polling
+    # Запускаем бота через polling
     await bot.delete_webhook(drop_pending_updates=True)
-    await on_startup(bot)
+    logger.info("Бот запускается в режиме polling...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
