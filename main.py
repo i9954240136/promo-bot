@@ -1,11 +1,31 @@
 import logging
+import os
+from flask import Flask
+from threading import Thread
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import WebAppInfo, InlineKeyboardBuilder
+from aiogram.types import WebAppInfo
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 import config
 import database as db
 
-# Настройка логов
+# Настройка Flask для Render
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def hello():
+    return "Bot is running!"
+
+@flask_app.route('/webhook', methods=['POST'])
+async def webhook():
+    return "OK"
+
+def run_flask():
+    flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+
+# Настройка бота
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
@@ -38,7 +58,6 @@ async def show_about(callback: types.CallbackQuery):
     )
 
 # 🔧 АДМИН: Добавить категорию
-# Команда: /add_cat Название 📦
 @dp.message(Command("add_cat"))
 async def admin_add_cat(message: types.Message):
     if message.from_user.id != config.ADMIN_ID: return
@@ -51,8 +70,7 @@ async def admin_add_cat(message: types.Message):
     except:
         await message.reply("❌ Ошибка. Формат: /add_cat Название 📦")
 
-# 🔧 АДМИН: Добавить офер (бренд)
-# Команда: /add_offer cat_id|Название Бренда|Описание
+# 🔧 АДМИН: Добавить офер
 @dp.message(Command("add_offer"))
 async def admin_add_offer(message: types.Message):
     if message.from_user.id != config.ADMIN_ID: return
@@ -67,7 +85,6 @@ async def admin_add_offer(message: types.Message):
         await message.reply(f"❌ Ошибка: {e}")
 
 # 🔧 АДМИН: Добавить промокод
-# Команда: /add_code offer_id|CODE123|Бонус|2024-12-31
 @dp.message(Command("add_code"))
 async def admin_add_code(message: types.Message):
     if message.from_user.id != config.ADMIN_ID: return
@@ -82,10 +99,20 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
-# 🚀 Запуск
+# Запуск
+async def on_startup(bot: Bot):
+    logging.info("Бот запущен!")
+
 async def main():
     db.init_db()
-    logging.info("Бот запущен...")
+    
+    # Запускаем Flask в отдельном потоке
+    flask_thread = Thread(target=run_flask)
+    flask_thread.start()
+    
+    # Настройка polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    await on_startup(bot)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
