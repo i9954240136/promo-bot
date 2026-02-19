@@ -1,6 +1,5 @@
 import logging
 import os
-from flask import Flask, request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo
@@ -10,26 +9,11 @@ from aiohttp import web
 import config
 import database as db
 
-# === Flask для health checks ===
-flask_app = Flask(__name__)
-
-@flask_app.route('/')
-def hello():
-    return "Bot is running! ✅"
-
-@flask_app.route('/health')
-def health():
-    return "OK", 200
-
-@flask_app.route('/webhook', methods=['POST'])
-async def webhook_handler():
-    # Для webhook через Flask (упрощённо)
-    return "OK", 200
-
-# === Настройка бота ===
+# === Настройка логирования ===
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# === Инициализация бота ===
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
 
@@ -104,36 +88,50 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
-# === Запуск с webhook ===
+# === Health check endpoint ===
+async def health_handler(request):
+    return web.json_response({"status": "ok", "message": "Bot is running! ✅"})
+
+# === Запуск ===
 async def on_startup(bot: Bot):
-    webhook_url = f"{config.WEBAPP_URL.replace('github.io', 'onrender.com')}/webhook"
-    await bot.set_webhook(webhook_url)
-    logger.info(f"Webhook установлен на {webhook_url}")
+    # Устанавливаем webhook
+    webhook_url = f"{os.environ.get('WEBAPP_URL', '').replace('github.io', 'onrender.com')}/webhook"
+    if webhook_url and 'onrender.com' in webhook_url:
+        await bot.set_webhook(webhook_url)
+        logger.info(f"Webhook установлен на {webhook_url}")
+    else:
+        logger.warning("WEBAPP_URL не настроен или не содержит onrender.com")
 
 async def main():
+    # Инициализация БД
     db.init_db()
     logger.info("База данных инициализирована")
     
-    # Запускаем Flask
-    from threading import Thread
-    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080))), daemon=True)
-    flask_thread.start()
-    logger.info(f"Flask запущен на порту {os.environ.get('PORT', 8080)}")
+    # Создаём aiohttp приложение
+    app = web.Application()
     
-    # Настройка webhook
+    # Добавляем health check
+    app.router.add_get('/', health_handler)
+    app.router.add_get('/health', health_handler)
+    
+    # Настраиваем webhook
     await on_startup(bot)
     
-    # Создаём aiohttp приложение для webhook
-    app = web.Application()
+    # Регистрируем webhook handler от aiogram
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
     
+    # Запускаем сервер
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
+    
+    # Получаем порт от Render (или используем 8080 по умолчанию)
+    port = int(os.environ.get('PORT', 8080))
+    
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
-    logger.info("Бот запущен в режиме webhook!")
+    logger.info(f"Бот запущен на порту {port} в режиме webhook!")
     
     # Держим приложение запущенным
     while True:
