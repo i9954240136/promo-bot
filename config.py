@@ -1,9 +1,7 @@
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
-
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://google.com")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+# Читаем переменные окружения от Render
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://google.com")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
