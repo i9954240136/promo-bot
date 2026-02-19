@@ -156,7 +156,7 @@ async def main():
     await runner.setup()
     
     # Получаем порт от Render
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 10000))
     logger.info(f"🚀 Запуск сервера на порту {port}...")
     
     site = web.TCPSite(runner, '0.0.0.0', port)
@@ -176,3 +176,4 @@ async def main():
 if __name__ == "__main__":
     logger.info("🎬 Запуск promo-bot...")
     asyncio.run(main())
+
