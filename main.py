@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo
@@ -10,7 +11,10 @@ import config
 import database as db
 
 # === Настройка логирования ===
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # === Инициализация бота ===
@@ -90,27 +94,53 @@ async def admin_add_code(message: types.Message):
 
 # === Health check endpoint ===
 async def health_handler(request):
-    return web.json_response({"status": "ok", "message": "Bot is running! ✅"})
+    return web.json_response({
+        "status": "ok", 
+        "message": "Bot is running! ✅",
+        "service": "promo-bot"
+    })
 
 # === Запуск ===
 async def on_startup(bot: Bot):
-    # Устанавливаем webhook
-    webhook_url = f"{os.environ.get('WEBAPP_URL', '').replace('github.io', 'onrender.com')}/webhook"
-    if webhook_url and 'onrender.com' in webhook_url:
-        await bot.set_webhook(webhook_url)
-        logger.info(f"Webhook установлен на {webhook_url}")
+    # Формируем правильный webhook URL из WEBAPP_URL
+    webapp_url = os.environ.get('WEBAPP_URL', '')
+    
+    # Если WEBAPP_URL содержит github.io, заменяем на onrender.com
+    if 'github.io' in webapp_url:
+        # Извлекаем имя пользователя и репозиторий
+        parts = webapp_url.rstrip('/').split('/')
+        if len(parts) >= 2:
+            username = parts[-2] if 'github.io' in parts[-2] else parts[-1]
+            repo = parts[-1] if 'github.io' not in parts[-1] else 'promo-bot'
+            webhook_base = f"https://{username.replace('.github.io', '')}-{'promo-bot'}.onrender.com"
+        else:
+            webhook_base = "https://promo-bot-ex86.onrender.com"
     else:
-        logger.warning("WEBAPP_URL не настроен или не содержит onrender.com")
+        # Используем напрямую, если уже есть Render URL
+        webhook_base = os.environ.get('SERVICE_URL', 'https://promo-bot-ex86.onrender.com')
+    
+    webhook_url = f"{webhook_base}/webhook"
+    
+    try:
+        await bot.set_webhook(webhook_url)
+        logger.info(f"✅ Webhook установлен на {webhook_url}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка установки webhook: {e}")
 
 async def main():
-    # Инициализация БД
-    db.init_db()
-    logger.info("База данных инициализирована")
+    try:
+        # Инициализация БД
+        logger.info("🔄 Инициализация базы данных...")
+        db.init_db()
+        logger.info("✅ База данных инициализирована")
+    except Exception as e:
+        logger.error(f"❌ Ошибка инициализации БД: {e}")
+        raise
     
     # Создаём aiohttp приложение
     app = web.Application()
     
-    # Добавляем health check
+    # Добавляем health check endpoints
     app.router.add_get('/', health_handler)
     app.router.add_get('/health', health_handler)
     
@@ -125,18 +155,24 @@ async def main():
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Получаем порт от Render (или используем 8080 по умолчанию)
+    # Получаем порт от Render
     port = int(os.environ.get('PORT', 8080))
+    logger.info(f"🚀 Запуск сервера на порту {port}...")
     
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
-    logger.info(f"Бот запущен на порту {port} в режиме webhook!")
+    logger.info(f"✅ Бот запущен в режиме webhook!")
+    logger.info(f"📍 Health check: http://0.0.0.0:{port}/health")
+    logger.info(f"📍 Webhook: http://0.0.0.0:{port}/webhook")
     
     # Держим приложение запущенным
-    while True:
-        await asyncio.sleep(3600)
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        logger.info("🛑 Бот остановлен")
 
 if __name__ == "__main__":
-    import asyncio
+    logger.info("🎬 Запуск promo-bot...")
     asyncio.run(main())
