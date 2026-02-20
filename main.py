@@ -104,9 +104,11 @@ async def main():
     # Создаём aiohttp приложение
     app = web.Application()
     
-    # ВАЖНО: Сначала регистрируем наши роуты
+    # ВАЖНО: Сначала регистрируем НАШИ роуты (до webhook handler)
     app.router.add_get('/', handle_webapp)
     app.router.add_get('/health', handle_health)
+    app.router.add_get('/ping', handle_health)  # Альтернативный путь
+    app.router.add_get('/status', handle_health)  # Ещё один путь
     
     await on_startup(bot)
     
@@ -123,8 +125,9 @@ async def main():
     await site.start()
     
     logger.info(f"🚀 Запущен на порту {port}")
-    logger.info(f"✅ Доступен: http://0.0.0.0:{port}")
     logger.info(f"✅ Health: http://0.0.0.0:{port}/health")
+    logger.info(f"✅ Ping: http://0.0.0.0:{port}/ping")
+    logger.info(f"✅ Status: http://0.0.0.0:{port}/status")
     
     while True:
         await asyncio.sleep(3600)
