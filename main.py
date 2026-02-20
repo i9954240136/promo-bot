@@ -80,6 +80,14 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
+# === Health check handler ===
+async def handle_health(request):
+    return web.json_response({
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "service": "promo-bot"
+    })
+
 # === Запуск ===
 async def on_startup(bot: Bot):
     webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'promo-bot-ex86.onrender.com')}/webhook"
@@ -90,48 +98,30 @@ async def main():
     db.init_db()
     logger.info("✅ БД готова")
     
-    # Создаём основное приложение для бота
-    bot_app = web.Application()
+    # Создаём приложение
+    app = web.Application()
+    
+    # ВАЖНО: Сначала регистрируем health check
+    app.router.add_get('/health', handle_health)
+    app.router.add_get('/ping', handle_health)
+    app.router.add_get('/', handle_health)
     
     await on_startup(bot)
     
-    # Регистрируем webhook handler
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(bot_app, path="/webhook")
-    setup_application(bot_app, dp, bot=bot)
+    # Потом регистрируем webhook handler
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+    setup_application(app, dp, bot=bot)
     
-    runner = web.AppRunner(bot_app)
+    runner = web.AppRunner(app)
     await runner.setup()
     
-    # Основной порт для бота
+    # Используем ОДИН порт
     port = int(os.environ.get('PORT', 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
-    logger.info(f"🚀 Бот запущен на порту {port}")
-    
-    # === ОТДЕЛЬНЫЙ СЕРВЕР ДЛЯ HEALTH CHECK ===
-    async def handle_health(request):
-        return web.json_response({
-            "status": "ok",
-            "timestamp": datetime.now().isoformat(),
-            "service": "promo-bot"
-        })
-    
-    health_app = web.Application()
-    health_app.router.add_get('/health', handle_health)
-    health_app.router.add_get('/ping', handle_health)
-    health_app.router.add_get('/', handle_health)
-    
-    health_runner = web.AppRunner(health_app)
-    await health_runner.setup()
-    
-    # Health check на порту +1 (10001)
-    health_port = port + 1
-    health_site = web.TCPSite(health_runner, '0.0.0.0', health_port)
-    await health_site.start()
-    
-    logger.info(f"✅ Health check на порту {health_port}")
-    logger.info(f"✅ URL: http://0.0.0.0:{health_port}/health")
+    logger.info(f"🚀 Запущен на порту {port}")
+    logger.info(f"✅ Health: http://0.0.0.0:{port}/health")
     
     while True:
         await asyncio.sleep(3600)
