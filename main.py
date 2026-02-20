@@ -80,22 +80,13 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
-# === Middleware для health check ===
-@web.middleware
-async def health_middleware(request, handler):
-    path = request.path
-    
-    # Обрабатываем health check ДО aiogram
-    if path in ['/health', '/ping', '/']:
-        return web.json_response({
-            "status": "ok",
-            "timestamp": datetime.now().isoformat(),
-            "service": "promo-bot",
-            "path": path
-        })
-    
-    # Иначе передаём дальше
-    return await handler(request)
+# === Health check handler ===
+async def handle_health(request):
+    return web.json_response({
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "service": "promo-bot"
+    })
 
 # === Запуск ===
 async def on_startup(bot: Bot):
@@ -108,13 +99,26 @@ async def main():
     logger.info("✅ БД готова")
     
     # Создаём приложение
-    app = web.Application(middlewares=[health_middleware])
+    app = web.Application()
+    
+    # Добавляем routes ДО setup_application
+    app.router.add_get('/health', handle_health)
+    app.router.add_get('/ping', handle_health)
+    app.router.add_get('/', handle_health)
     
     await on_startup(bot)
     
     # Регистрируем webhook handler
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+    
+    # ВАЖНО: setup_application добавляет свои роуты, которые могут переопределить наши
+    # Поэтому регистрируем наши роуты ПОСЛЕ setup_application
     setup_application(app, dp, bot=bot)
+    
+    # ПЕРЕЗАПИСЫВАЕМ роуты после setup_application
+    app.router.add_get('/health', handle_health)
+    app.router.add_get('/ping', handle_health)
+    app.router.add_get('/', handle_health)
     
     runner = web.AppRunner(app)
     await runner.setup()
@@ -125,7 +129,6 @@ async def main():
     
     logger.info(f"🚀 Запущен на порту {port}")
     logger.info(f"✅ Health: http://0.0.0.0:{port}/health")
-    logger.info(f"✅ Ping: http://0.0.0.0:{port}/ping")
     
     while True:
         await asyncio.sleep(3600)
