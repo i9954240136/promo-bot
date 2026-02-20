@@ -1,3 +1,14 @@
+from fastapi import FastAPI
+from datetime import datetime
+
+app = FastAPI()
+
+# === НОВЫЙ ЭНДПОИНТ ДЛЯ ПИНГА ===
+@app.get('/health')
+async def health_check():
+    return {"status": "ok", "timestamp": datetime.now()}
+
+# ... остальной ваш код ...
 import logging
 import os
 import asyncio
@@ -119,3 +130,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
