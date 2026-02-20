@@ -1,4 +1,4 @@
-# === ИМПОРТЫ (всегда в начале!) ===
+# === ИМПОРТЫ ===
 import logging
 import os
 import asyncio
@@ -82,10 +82,14 @@ async def admin_add_code(message: types.Message):
 
 # === Web приложение ===
 async def handle_webapp(request):
-    return web.Response(text="Bot is running! ✅", content_type='text/html')
+    return web.Response(text="<h1>Bot is running! ✅</h1>", content_type='text/html')
 
 async def handle_health(request):
-    return web.json_response({"status": "ok", "timestamp": datetime.now().isoformat()})
+    return web.json_response({
+        "status": "ok", 
+        "timestamp": datetime.now().isoformat(),
+        "service": "promo-bot"
+    })
 
 # === Запуск ===
 async def on_startup(bot: Bot):
@@ -97,24 +101,30 @@ async def main():
     db.init_db()
     logger.info("✅ БД готова")
     
+    # Создаём aiohttp приложение
     app = web.Application()
+    
+    # ВАЖНО: Сначала регистрируем наши роуты
     app.router.add_get('/', handle_webapp)
-    app.router.add_get('/health', handle_health)  # Эндпоинт для пинга!
+    app.router.add_get('/health', handle_health)
     
     await on_startup(bot)
     
+    # Потом регистрируем webhook handler от aiogram
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
     
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # ВАЖНО: Используем порт от Render
+    # Используем порт от Render
     port = int(os.environ.get('PORT', 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
     logger.info(f"🚀 Запущен на порту {port}")
+    logger.info(f"✅ Доступен: http://0.0.0.0:{port}")
+    logger.info(f"✅ Health: http://0.0.0.0:{port}/health")
     
     while True:
         await asyncio.sleep(3600)
