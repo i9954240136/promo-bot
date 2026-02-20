@@ -80,13 +80,22 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
-# === Health check handler ===
-async def handle_health(request):
-    return web.json_response({
-        "status": "ok",
-        "timestamp": datetime.now().isoformat(),
-        "service": "promo-bot"
-    })
+# === Middleware для health check ===
+@web.middleware
+async def health_middleware(request, handler):
+    path = request.path
+    
+    # Обрабатываем health check ДО aiogram
+    if path in ['/health', '/ping', '/']:
+        return web.json_response({
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "service": "promo-bot",
+            "path": path
+        })
+    
+    # Иначе передаём дальше
+    return await handler(request)
 
 # === Запуск ===
 async def on_startup(bot: Bot):
@@ -99,29 +108,24 @@ async def main():
     logger.info("✅ БД готова")
     
     # Создаём приложение
-    app = web.Application()
-    
-    # ВАЖНО: Сначала регистрируем health check
-    app.router.add_get('/health', handle_health)
-    app.router.add_get('/ping', handle_health)
-    app.router.add_get('/', handle_health)
+    app = web.Application(middlewares=[health_middleware])
     
     await on_startup(bot)
     
-    # Потом регистрируем webhook handler
+    # Регистрируем webhook handler
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
     
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Используем ОДИН порт
     port = int(os.environ.get('PORT', 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
     logger.info(f"🚀 Запущен на порту {port}")
     logger.info(f"✅ Health: http://0.0.0.0:{port}/health")
+    logger.info(f"✅ Ping: http://0.0.0.0:{port}/ping")
     
     while True:
         await asyncio.sleep(3600)
