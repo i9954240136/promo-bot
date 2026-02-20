@@ -1,22 +1,8 @@
-from fastapi import FastAPI
-from datetime import datetime
-
-# Создаём приложение FastAPI (если ещё не создано)
-app = FastAPI()
-
-# Эндпоинт для пинга
-@app.get('/health')
-async def health_check():
-    return {"status": "ok", "timestamp": datetime.now()}
-
-# Эндпоинт для webhook Telegram
-@app.post('/webhook')
-async def webhook(request: Request):
-    # ... ваш существующий код ...
-
+# === ИМПОРТЫ (всегда в начале!) ===
 import logging
 import os
 import asyncio
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo
@@ -99,7 +85,7 @@ async def handle_webapp(request):
     return web.Response(text="Bot is running! ✅", content_type='text/html')
 
 async def handle_health(request):
-    return web.json_response({"status": "ok"})
+    return web.json_response({"status": "ok", "timestamp": datetime.now().isoformat()})
 
 # === Запуск ===
 async def on_startup(bot: Bot):
@@ -113,7 +99,7 @@ async def main():
     
     app = web.Application()
     app.router.add_get('/', handle_webapp)
-    app.router.add_get('/health', handle_health)
+    app.router.add_get('/health', handle_health)  # Эндпоинт для пинга!
     
     await on_startup(bot)
     
@@ -135,5 +121,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
