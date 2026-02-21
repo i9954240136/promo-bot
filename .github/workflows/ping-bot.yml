@@ -2,14 +2,13 @@ name: Ping Bot Every Minute
 
 on:
   schedule:
-    # Запускается каждую минуту
-    - cron: '* * * * *'
+    - cron: '* * * * *'  # Каждую минуту
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping bot health endpoint
+      - name: Ping bot root
         run: |
-          curl -X GET https://promo-bot-ex86.onrender.com/health || echo "Ping failed"
+          curl -X GET https://promo-bot-ex86.onrender.com/ || echo "Ping failed"
