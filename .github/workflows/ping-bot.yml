@@ -9,6 +9,6 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping bot root
+      - name: Ping bot
         run: |
-          curl -X GET https://promo-bot-ex86.onrender.com/ || echo "Ping failed"
+          curl http://promo-bot-ex86.onrender.com:10001/ping || echo "Ping failed"
