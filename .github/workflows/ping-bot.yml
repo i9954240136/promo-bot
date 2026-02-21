@@ -1,10 +1,10 @@
-name: Ping Bot Every 5 Minutes
+name: Ping Bot Every Minute
 
 on:
   schedule:
-    # Запускается каждые 5 минут
-    - cron: '*/5 * * * *'
-  workflow_dispatch:  # Позволяет запустить вручную
+    # Запускается каждую минуту
+    - cron: '* * * * *'
+  workflow_dispatch:
 
 jobs:
   ping:
