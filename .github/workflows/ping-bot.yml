@@ -2,7 +2,7 @@ name: Ping Bot Every Minute
 
 on:
   schedule:
-    - cron: '* * * * *'  # Каждую минуту
+    - cron: '* * * * *'
   workflow_dispatch:
 
 jobs:
