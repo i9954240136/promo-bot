@@ -80,22 +80,6 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
-# === Web handlers ===
-async def handle_root(request):
-    """Обработка корневого пути"""
-    return web.Response(
-        text="<html><body><h1>✅ Bot is running!</h1><p>Service: Promo Bot</p><p>Time: " + datetime.now().isoformat() + "</p></body></html>",
-        content_type='text/html'
-    )
-
-async def handle_health(request):
-    """Health check endpoint"""
-    return web.json_response({
-        "status": "ok",
-        "timestamp": datetime.now().isoformat(),
-        "service": "promo-bot"
-    })
-
 # === Запуск ===
 async def on_startup(bot: Bot):
     webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'promo-bot-ex86.onrender.com')}/webhook"
@@ -106,36 +90,49 @@ async def main():
     db.init_db()
     logger.info("✅ База данных готова")
     
-    # Создаём приложение
-    app = web.Application()
-    
-    # 1. Сначала добавляем НАШИ роуты
-    app.router.add_get('/', handle_root)
-    app.router.add_get('/health', handle_health)
+    # === БОТ СЕРВЕР ===
+    bot_app = web.Application()
     
     await on_startup(bot)
     
-    # 2. Регистрируем webhook handler от aiogram
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
-    setup_application(app, dp, bot=bot)
+    # Регистрируем webhook handler
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(bot_app, path="/webhook")
+    setup_application(bot_app, dp, bot=bot)
     
-    # 3. ПЕРЕЗАПИСЫВАЕМ роуты после setup_application
-    app.router.add_get('/', handle_root)
-    app.router.add_get('/health', handle_health)
+    bot_runner = web.AppRunner(bot_app)
+    await bot_runner.setup()
     
-    runner = web.AppRunner(app)
-    await runner.setup()
-    
-    # Используем порт от Render
+    # Порт для бота
     port = int(os.environ.get('PORT', 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
+    bot_site = web.TCPSite(bot_runner, '0.0.0.0', port)
+    await bot_site.start()
     
-    logger.info(f"🚀 Бот запущен на порту {port}")
-    logger.info(f"✅ Root: http://0.0.0.0:{port}/")
-    logger.info(f"✅ Health: http://0.0.0.0:{port}/health")
+    logger.info(f"🤖 Бот запущен на порту {port}")
     
-    # Бесконечный цикл для поддержания работы
+    # === HEALTH CHECK СЕРВЕР (отдельный!) ===
+    async def handle_ping(request):
+        return web.json_response({
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "service": "promo-bot-ping"
+        })
+    
+    ping_app = web.Application()
+    ping_app.router.add_get('/ping', handle_ping)
+    ping_app.router.add_get('/health', handle_ping)
+    
+    ping_runner = web.AppRunner(ping_app)
+    await ping_runner.setup()
+    
+    # Health check на порту +1
+    ping_port = port + 1
+    ping_site = web.TCPSite(ping_runner, '0.0.0.0', ping_port)
+    await ping_site.start()
+    
+    logger.info(f"✅ Health check на порту {ping_port}")
+    logger.info(f"✅ URL: http://0.0.0.0:{ping_port}/ping")
+    
+    # Бесконечный цикл
     while True:
         await asyncio.sleep(3600)
 
