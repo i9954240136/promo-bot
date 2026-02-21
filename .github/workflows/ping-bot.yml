@@ -11,4 +11,4 @@ jobs:
     steps:
       - name: Ping bot
         run: |
-          curl http://promo-bot-ex86.onrender.com:10001/ping || echo "Ping failed"
+          curl https://promo-bot-ex86.onrender.com/ || echo "Ping failed"
