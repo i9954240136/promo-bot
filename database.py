@@ -93,6 +93,20 @@ def add_user(user_id, username=None, first_name=None, last_name=None, language_c
     finally:
         conn.close()
 
+def update_user_last_seen(user_id):
+    """Обновляет время последнего посещения"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE users 
+        SET last_seen = ?
+        WHERE user_id = ?
+    ''', (datetime.now(), user_id))
+    
+    conn.commit()
+    conn.close()
+
 def get_total_users():
     """Возвращает общее количество пользователей"""
     conn = sqlite3.connect(DB_NAME)
