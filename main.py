@@ -126,11 +126,20 @@ async def handle_webapp_data(message: types.Message):
         data = json.loads(message.web_app_data.data)
         logger.info(f"📥 Получены данные от Mini App: {data}")
         
-        if data.get('action') == 'app_opened':
-            user_id = data.get('user_id')
-            if user_id:
-                db.update_user_last_seen(user_id)
-                logger.info(f"📱 Mini App открыт пользователем: {user_id}")
+        action = data.get('action')
+        user_id = data.get('user_id')
+        
+        if user_id:
+            # Обновляем last_seen при любом действии
+            db.update_user_last_seen(user_id)
+            
+            if action == 'app_opened':
+                logger.info(f"📱 Mini App открыт: {user_id}")
+            elif action == 'brand_viewed':
+                brand = data.get('brand', 'Unknown')
+                logger.info(f"👁 {user_id} просмотрел бренд: {brand}")
+            elif action == 'promo_copied':
+                logger.info(f"📋 {user_id} скопировал промокод")
     except Exception as e:
         logger.error(f"❌ Ошибка обработки WebApp данных: {e}")
 
