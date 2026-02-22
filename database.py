@@ -127,3 +127,38 @@ def get_promo_codes(offer_id):
         return response.data
     except:
         return []
+
+# === ФУНКЦИИ ДЛЯ АНАЛИТИКИ ===
+
+def get_analytics_summary(days=7):
+    """Получает сводную аналитику за период"""
+    try:
+        # Активные пользователи
+        response = supabase.rpc('get_active_users', {'days': days}).execute()
+        active_users = len(response.data) if response.data else 0
+        
+        # Популярные бренды
+        response = supabase.rpc('get_popular_brands', {'limit_count': 5}).execute()
+        popular_brands = response.data if response.data else []
+        
+        # Статистика по дням
+        response = supabase.rpc('get_daily_stats', {'days': days}).execute()
+        daily_stats = response.data if response.data else []
+        
+        return {
+            'active_users': active_users,
+            'popular_brands': popular_brands,
+            'daily_stats': daily_stats
+        }
+    except Exception as e:
+        print(f"❌ Ошибка аналитики: {e}")
+        return None
+
+def get_user_actions(user_id, limit=50):
+    """Получает действия конкретного пользователя"""
+    try:
+        response = supabase.table('analytics').select('*').eq('user_id', user_id).order('created_at', desc=True).limit(limit).execute()
+        return response.data
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        return []
