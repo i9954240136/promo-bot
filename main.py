@@ -23,6 +23,7 @@ dp = Dispatcher()
 # === Хендлеры ===
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    """Обработка команды /start - сохраняет пользователя в базу"""
     # === СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БАЗУ ===
     try:
         db.add_user(
@@ -48,11 +49,13 @@ async def cmd_start(message: types.Message):
 
 @dp.callback_query(F.data == "about")
 async def show_about(callback: types.CallbackQuery):
+    """Обработка кнопки 'О проекте'"""
     await callback.answer()
     await callback.message.edit_text("📱 Promo Bot работает!")
 
 @dp.message(Command("add_cat"))
 async def admin_add_cat(message: types.Message):
+    """Добавление категории (только для админа)"""
     if message.from_user.id != config.ADMIN_ID:
         await message.reply(f"❌ Ваш ID: {message.from_user.id}")
         return
@@ -67,6 +70,7 @@ async def admin_add_cat(message: types.Message):
 
 @dp.message(Command("add_offer"))
 async def admin_add_offer(message: types.Message):
+    """Добавление бренда (только для админа)"""
     if message.from_user.id != config.ADMIN_ID:
         return
     try:
@@ -81,6 +85,7 @@ async def admin_add_offer(message: types.Message):
 
 @dp.message(Command("add_code"))
 async def admin_add_code(message: types.Message):
+    """Добавление промокода (только для админа)"""
     if message.from_user.id != config.ADMIN_ID:
         return
     try:
@@ -96,7 +101,7 @@ async def admin_add_code(message: types.Message):
 
 @dp.message(Command("stats"))
 async def admin_stats(message: types.Message):
-    """Показывает статистику пользователей"""
+    """Показывает статистику пользователей (только для админа)"""
     if message.from_user.id != config.ADMIN_ID:
         return
     
@@ -137,11 +142,13 @@ async def self_ping():
 
 # === Запуск ===
 async def on_startup(bot: Bot):
+    """Настройка webhook при запуске"""
     webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'promo-bot-ex86.onrender.com')}/webhook"
     await bot.set_webhook(webhook_url)
     logger.info(f"🔗 Webhook: {webhook_url}")
 
 async def main():
+    """Основная функция запуска"""
     db.init_db()
     logger.info("✅ База данных готова")
     
