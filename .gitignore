@@ -1,0 +1,13 @@
+# Файлы с токенами
+config.py
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+
+# База данных
+*.db
+*.sqlite
+*.sqlite3
