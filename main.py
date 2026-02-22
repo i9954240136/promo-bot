@@ -2,6 +2,7 @@
 import logging
 import os
 import asyncio
+import json
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -33,7 +34,7 @@ async def cmd_start(message: types.Message):
             last_name=message.from_user.last_name,
             language_code=message.from_user.language_code
         )
-        logger.info(f"✅ Пользователь сохранён: {message.from_user.id}")
+        logger.info(f"✅ Новый пользователь: {message.from_user.id}")
     except Exception as e:
         logger.error(f"❌ Ошибка сохранения пользователя: {e}")
     
@@ -119,6 +120,19 @@ async def admin_stats(message: types.Message):
         )
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
+
+@dp.message(F.content_type == types.ContentType.WEB_APP_DATA)
+async def handle_webapp_data(message: types.Message):
+    """Обрабатывает данные от Mini App (открытие приложения)"""
+    try:
+        data = json.loads(message.web_app_data.data)
+        if data.get('action') == 'app_opened':
+            user_id = data.get('user_id')
+            if user_id:
+                db.update_user_last_seen(user_id)
+                logger.info(f"📱 Mini App открыт пользователем: {user_id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка обработки WebApp данных: {e}")
 
 # === Self-ping для предотвращения сна ===
 async def self_ping():
