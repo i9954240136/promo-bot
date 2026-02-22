@@ -23,6 +23,20 @@ dp = Dispatcher()
 # === Хендлеры ===
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    # === СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БАЗУ ===
+    try:
+        db.add_user(
+            user_id=message.from_user.id,
+            username=message.from_user.username,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name,
+            language_code=message.from_user.language_code
+        )
+        logger.info(f"✅ Пользователь сохранён: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения пользователя: {e}")
+    
+    # Создаём клавиатуру
     builder = InlineKeyboardBuilder()
     builder.button(text="🎁 Открыть каталог", web_app=WebAppInfo(url=config.WEBAPP_URL))
     builder.button(text="ℹ️ О проекте", callback_data="about")
@@ -80,6 +94,47 @@ async def admin_add_code(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
+@dp.message(Command("stats"))
+async def admin_stats(message: types.Message):
+    """Показывает статистику пользователей"""
+    if message.from_user.id != config.ADMIN_ID:
+        return
+    
+    try:
+        total_users = db.get_total_users()
+        active_users = db.get_active_users(days=7)
+        new_users = db.get_new_users(days=1)
+        
+        await message.reply(
+            f"📊 **Статистика бота**\n\n"
+            f"👥 Всего пользователей: {total_users}\n"
+            f"🟢 Активных за 7 дней: {active_users}\n"
+            f"🆕 Новых за 24 часа: {new_users}\n\n"
+            f"📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
+    except Exception as e:
+        await message.reply(f"❌ Ошибка: {e}")
+
+# === Self-ping для предотвращения сна ===
+async def self_ping():
+    """Автоматический пинг каждые 5 минут изнутри бота"""
+    import aiohttp
+    
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Пингуем сами себя через localhost
+                async with session.get(
+                    'http://localhost:10000/webhook',
+                    json={'test': 'ping'},
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    logger.info(f"🔄 Self-ping: {resp.status}")
+        except Exception as e:
+            logger.error(f"❌ Self-ping error: {e}")
+        
+        await asyncio.sleep(300)  # 5 минут
+
 # === Запуск ===
 async def on_startup(bot: Bot):
     webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'promo-bot-ex86.onrender.com')}/webhook"
@@ -90,49 +145,30 @@ async def main():
     db.init_db()
     logger.info("✅ База данных готова")
     
-    # === БОТ СЕРВЕР ===
-    bot_app = web.Application()
+    # Создаём приложение
+    app = web.Application()
     
     await on_startup(bot)
     
     # Регистрируем webhook handler
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(bot_app, path="/webhook")
-    setup_application(bot_app, dp, bot=bot)
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+    setup_application(app, dp, bot=bot)
     
-    bot_runner = web.AppRunner(bot_app)
-    await bot_runner.setup()
+    runner = web.AppRunner(app)
+    await runner.setup()
     
-    # Порт для бота
+    # Используем порт от Render
     port = int(os.environ.get('PORT', 10000))
-    bot_site = web.TCPSite(bot_runner, '0.0.0.0', port)
-    await bot_site.start()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
     
-    logger.info(f"🤖 Бот запущен на порту {port}")
+    logger.info(f"🚀 Бот запущен на порту {port}")
     
-    # === HEALTH CHECK СЕРВЕР (отдельный!) ===
-    async def handle_ping(request):
-        return web.json_response({
-            "status": "ok",
-            "timestamp": datetime.now().isoformat(),
-            "service": "promo-bot-ping"
-        })
+    # Запускаем self-ping в фоне
+    asyncio.create_task(self_ping())
+    logger.info("✅ Self-ping запущен (каждые 5 минут)")
     
-    ping_app = web.Application()
-    ping_app.router.add_get('/ping', handle_ping)
-    ping_app.router.add_get('/health', handle_ping)
-    
-    ping_runner = web.AppRunner(ping_app)
-    await ping_runner.setup()
-    
-    # Health check на порту +1
-    ping_port = port + 1
-    ping_site = web.TCPSite(ping_runner, '0.0.0.0', ping_port)
-    await ping_site.start()
-    
-    logger.info(f"✅ Health check на порту {ping_port}")
-    logger.info(f"✅ URL: http://0.0.0.0:{ping_port}/ping")
-    
-    # Бесконечный цикл
+    # Бесконечный цикл для поддержания работы
     while True:
         await asyncio.sleep(3600)
 
