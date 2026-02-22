@@ -24,7 +24,7 @@ dp = Dispatcher()
 # === Хендлеры ===
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    """Обработка команды /start"""
+    """Обработка команды /start - сохраняет пользователя в базу"""
     try:
         db.add_user(
             user_id=message.from_user.id,
@@ -54,7 +54,7 @@ async def show_about(callback: types.CallbackQuery):
 
 @dp.message(Command("add_cat"))
 async def admin_add_cat(message: types.Message):
-    """Добавление категории"""
+    """Добавление категории (только для админа)"""
     if message.from_user.id != config.ADMIN_ID:
         await message.reply(f"❌ Ваш ID: {message.from_user.id}")
         return
@@ -69,7 +69,7 @@ async def admin_add_cat(message: types.Message):
 
 @dp.message(Command("add_offer"))
 async def admin_add_offer(message: types.Message):
-    """Добавление бренда"""
+    """Добавление бренда (только для админа)"""
     if message.from_user.id != config.ADMIN_ID:
         return
     try:
@@ -84,7 +84,7 @@ async def admin_add_offer(message: types.Message):
 
 @dp.message(Command("add_code"))
 async def admin_add_code(message: types.Message):
-    """Добавление промокода"""
+    """Добавление промокода (только для админа)"""
     if message.from_user.id != config.ADMIN_ID:
         return
     try:
@@ -100,7 +100,7 @@ async def admin_add_code(message: types.Message):
 
 @dp.message(Command("stats"))
 async def admin_stats(message: types.Message):
-    """Показывает статистику"""
+    """Показывает статистику пользователей (только для админа)"""
     if message.from_user.id != config.ADMIN_ID:
         return
     
@@ -119,9 +119,35 @@ async def admin_stats(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
+@dp.message(Command("analytics"))
+async def show_analytics(message: types.Message):
+    """Показывает аналитику из Supabase (только для админа)"""
+    if message.from_user.id != config.ADMIN_ID:
+        return
+    
+    try:
+        data = db.get_analytics_summary(days=7)
+        
+        if not data:
+            await message.reply("❌ Ошибка получения данных")
+            return
+        
+        text = f"📊 **Аналитика за 7 дней**\n\n"
+        text += f"👥 Активных пользователей: {data['active_users']}\n\n"
+        
+        if data['popular_brands']:
+            text += "🔥 **Популярные бренды:**\n"
+            for brand in data['popular_brands'][:5]:
+                text += f"  • {brand['brand']}: {brand['views']} просмотров\n"
+        
+        await message.reply(text)
+    except Exception as e:
+        logger.error(f"❌ Ошибка аналитики: {e}")
+        await message.reply(f"❌ Ошибка: {e}")
+
 @dp.message(F.content_type == types.ContentType.WEB_APP_DATA)
 async def handle_webapp_data(message: types.Message):
-    """📱 ОБРАБОТКА ДАННЫХ ОТ MINI APP"""
+    """📱 Обработка данных от Mini App (резервный вариант)"""
     try:
         data = json.loads(message.web_app_data.data)
         logger.info(f"📥 Получены данные от Mini App: {data}")
@@ -130,7 +156,6 @@ async def handle_webapp_data(message: types.Message):
         user_id = data.get('user_id')
         
         if user_id:
-            # Обновляем last_seen при любом действии
             db.update_user_last_seen(user_id)
             
             if action == 'app_opened':
@@ -143,7 +168,7 @@ async def handle_webapp_data(message: types.Message):
     except Exception as e:
         logger.error(f"❌ Ошибка обработки WebApp данных: {e}")
 
-# === Self-ping ===
+# === Self-ping для предотвращения сна ===
 async def self_ping():
     """Автоматический пинг каждые 5 минут"""
     import aiohttp
@@ -160,38 +185,44 @@ async def self_ping():
         except Exception as e:
             logger.error(f"❌ Self-ping error: {e}")
         
-        await asyncio.sleep(300)
+        await asyncio.sleep(300)  # 5 минут
 
 # === Запуск ===
 async def on_startup(bot: Bot):
-    """Настройка webhook"""
+    """Настройка webhook при запуске"""
     webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'promo-bot-ex86.onrender.com')}/webhook"
     await bot.set_webhook(webhook_url)
     logger.info(f"🔗 Webhook: {webhook_url}")
 
 async def main():
-    """Основная функция"""
+    """Основная функция запуска"""
     db.init_db()
     logger.info("✅ База данных готова")
     
+    # Создаём приложение
     app = web.Application()
+    
     await on_startup(bot)
     
+    # Регистрируем webhook handler
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
     
     runner = web.AppRunner(app)
     await runner.setup()
     
+    # Используем порт от Render
     port = int(os.environ.get('PORT', 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
     logger.info(f"🚀 Бот запущен на порту {port}")
     
+    # Запускаем self-ping в фоне
     asyncio.create_task(self_ping())
-    logger.info("✅ Self-ping запущен")
+    logger.info("✅ Self-ping запущен (каждые 5 минут)")
     
+    # Бесконечный цикл для поддержания работы
     while True:
         await asyncio.sleep(3600)
 
