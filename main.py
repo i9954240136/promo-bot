@@ -24,8 +24,7 @@ dp = Dispatcher()
 # === Хендлеры ===
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    """Обработка команды /start - сохраняет пользователя в базу"""
-    # === СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БАЗУ ===
+    """Обработка команды /start"""
     try:
         db.add_user(
             user_id=message.from_user.id,
@@ -36,9 +35,8 @@ async def cmd_start(message: types.Message):
         )
         logger.info(f"✅ Новый пользователь: {message.from_user.id}")
     except Exception as e:
-        logger.error(f"❌ Ошибка сохранения пользователя: {e}")
+        logger.error(f"❌ Ошибка: {e}")
     
-    # Создаём клавиатуру
     builder = InlineKeyboardBuilder()
     builder.button(text="🎁 Открыть каталог", web_app=WebAppInfo(url=config.WEBAPP_URL))
     builder.button(text="ℹ️ О проекте", callback_data="about")
@@ -56,7 +54,7 @@ async def show_about(callback: types.CallbackQuery):
 
 @dp.message(Command("add_cat"))
 async def admin_add_cat(message: types.Message):
-    """Добавление категории (только для админа)"""
+    """Добавление категории"""
     if message.from_user.id != config.ADMIN_ID:
         await message.reply(f"❌ Ваш ID: {message.from_user.id}")
         return
@@ -71,7 +69,7 @@ async def admin_add_cat(message: types.Message):
 
 @dp.message(Command("add_offer"))
 async def admin_add_offer(message: types.Message):
-    """Добавление бренда (только для админа)"""
+    """Добавление бренда"""
     if message.from_user.id != config.ADMIN_ID:
         return
     try:
@@ -86,7 +84,7 @@ async def admin_add_offer(message: types.Message):
 
 @dp.message(Command("add_code"))
 async def admin_add_code(message: types.Message):
-    """Добавление промокода (только для админа)"""
+    """Добавление промокода"""
     if message.from_user.id != config.ADMIN_ID:
         return
     try:
@@ -102,7 +100,7 @@ async def admin_add_code(message: types.Message):
 
 @dp.message(Command("stats"))
 async def admin_stats(message: types.Message):
-    """Показывает статистику пользователей (только для админа)"""
+    """Показывает статистику"""
     if message.from_user.id != config.ADMIN_ID:
         return
     
@@ -123,9 +121,11 @@ async def admin_stats(message: types.Message):
 
 @dp.message(F.content_type == types.ContentType.WEB_APP_DATA)
 async def handle_webapp_data(message: types.Message):
-    """Обрабатывает данные от Mini App (открытие приложения)"""
+    """📱 ОБРАБОТКА ДАННЫХ ОТ MINI APP"""
     try:
         data = json.loads(message.web_app_data.data)
+        logger.info(f"📥 Получены данные от Mini App: {data}")
+        
         if data.get('action') == 'app_opened':
             user_id = data.get('user_id')
             if user_id:
@@ -134,15 +134,14 @@ async def handle_webapp_data(message: types.Message):
     except Exception as e:
         logger.error(f"❌ Ошибка обработки WebApp данных: {e}")
 
-# === Self-ping для предотвращения сна ===
+# === Self-ping ===
 async def self_ping():
-    """Автоматический пинг каждые 5 минут изнутри бота"""
+    """Автоматический пинг каждые 5 минут"""
     import aiohttp
     
     while True:
         try:
             async with aiohttp.ClientSession() as session:
-                # Пингуем сами себя через localhost
                 async with session.get(
                     'http://localhost:10000/webhook',
                     json={'test': 'ping'},
@@ -152,44 +151,38 @@ async def self_ping():
         except Exception as e:
             logger.error(f"❌ Self-ping error: {e}")
         
-        await asyncio.sleep(300)  # 5 минут
+        await asyncio.sleep(300)
 
 # === Запуск ===
 async def on_startup(bot: Bot):
-    """Настройка webhook при запуске"""
+    """Настройка webhook"""
     webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'promo-bot-ex86.onrender.com')}/webhook"
     await bot.set_webhook(webhook_url)
     logger.info(f"🔗 Webhook: {webhook_url}")
 
 async def main():
-    """Основная функция запуска"""
+    """Основная функция"""
     db.init_db()
     logger.info("✅ База данных готова")
     
-    # Создаём приложение
     app = web.Application()
-    
     await on_startup(bot)
     
-    # Регистрируем webhook handler
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
     
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Используем порт от Render
     port = int(os.environ.get('PORT', 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
     logger.info(f"🚀 Бот запущен на порту {port}")
     
-    # Запускаем self-ping в фоне
     asyncio.create_task(self_ping())
-    logger.info("✅ Self-ping запущен (каждые 5 минут)")
+    logger.info("✅ Self-ping запущен")
     
-    # Бесконечный цикл для поддержания работы
     while True:
         await asyncio.sleep(3600)
 
