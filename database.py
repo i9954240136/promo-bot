@@ -1,6 +1,10 @@
 import os
+import logging
 from datetime import datetime, timedelta
 from supabase import create_client, Client
+
+# === НАСТРОЙКА ЛОГИРОВАНИЯ ===
+logger = logging.getLogger(__name__)
 
 # Инициализация Supabase
 SUPABASE_URL = os.getenv('SUPABASE_URL')
@@ -38,7 +42,7 @@ def add_user(user_id, username=None, first_name=None, last_name=None, language_c
                 'last_seen': datetime.now().isoformat()
             }).execute()
     except Exception as e:
-        print(f"❌ Ошибка добавления пользователя: {e}")
+        logger.error(f"❌ Ошибка добавления пользователя: {e}")
 
 def update_user_last_seen(user_id):
     """Обновляет время последнего посещения"""
@@ -47,7 +51,7 @@ def update_user_last_seen(user_id):
             'last_seen': datetime.now().isoformat()
         }).eq('user_id', user_id).execute()
     except Exception as e:
-        print(f"❌ Ошибка обновления last_seen: {e}")
+        logger.error(f"❌ Ошибка обновления last_seen: {e}")
 
 def get_total_users():
     """Всего пользователей"""
@@ -80,7 +84,7 @@ def add_category(name, emoji='📦'):
     try:
         supabase.table('categories').insert({'name': name, 'icon_emoji': emoji}).execute()
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        logger.error(f"❌ Ошибка: {e}")
 
 def add_offer(category_id, brand_name, description='', additional_info=''):
     try:
@@ -91,7 +95,7 @@ def add_offer(category_id, brand_name, description='', additional_info=''):
             'additional_info': additional_info
         }).execute()
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        logger.error(f"❌ Ошибка: {e}")
 
 def add_promo_code(offer_id, code_text, bonus_info='', expires_at=None):
     try:
@@ -102,7 +106,7 @@ def add_promo_code(offer_id, code_text, bonus_info='', expires_at=None):
             'expires_at': expires_at
         }).execute()
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        logger.error(f"❌ Ошибка: {e}")
 
 def get_categories():
     try:
@@ -151,7 +155,7 @@ def get_analytics_summary(days=7):
             'daily_stats': daily_stats
         }
     except Exception as e:
-        print(f"❌ Ошибка аналитики: {e}")
+        logger.error(f"❌ Ошибка аналитики: {e}")
         return None
 
 def get_user_actions(user_id, limit=50):
@@ -160,33 +164,26 @@ def get_user_actions(user_id, limit=50):
         response = supabase.table('analytics').select('*').eq('user_id', user_id).order('created_at', desc=True).limit(limit).execute()
         return response.data
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        logger.error(f"❌ Ошибка: {e}")
         return []
 
 # =====================================================
-# 📢 ФУНКЦИИ ДЛЯ РАССЫЛОК
+# 📢 ФУНКЦИИ ДЛЯ РАССЫЛОК (ИСПРАВЛЕНО - ЧЕРЕZ SUPABASE)
 # =====================================================
 
 def get_all_users():
     """Получить всех пользователей для рассылки"""
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT user_id, username, first_name 
-            FROM users 
-            ORDER BY created_at DESC
-        """)
-        users = cursor.fetchall()
-        cursor.close()
+        response = supabase.table('users').select('user_id, username, first_name').order('created_at', desc=True).execute()
         
         return [
             {
-                'user_id': row[0],
-                'username': row[1],
-                'first_name': row[2]
+                'user_id': row['user_id'],
+                'username': row['username'],
+                'first_name': row['first_name']
             }
-            for row in users
-        ]
+            for row in response.data
+        ] if response.data else []
     except Exception as e:
         logger.error(f"❌ Ошибка получения пользователей: {e}")
         return []
@@ -194,13 +191,12 @@ def get_all_users():
 def add_broadcast(message, sent_by, total_sent, total_failed):
     """Сохранить рассылку в базу"""
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO broadcasts (message, sent_by, total_sent, total_failed)
-            VALUES (%s, %s, %s, %s)
-        """, (message, str(sent_by), total_sent, total_failed))
-        conn.commit()
-        cursor.close()
+        supabase.table('broadcasts').insert({
+            'message': message,
+            'sent_by': str(sent_by),
+            'total_sent': total_sent,
+            'total_failed': total_failed
+        }).execute()
         return True
     except Exception as e:
         logger.error(f"❌ Ошибка сохранения рассылки: {e}")
@@ -209,25 +205,17 @@ def add_broadcast(message, sent_by, total_sent, total_failed):
 def get_broadcast_stats(limit=10):
     """Получить статистику рассылок"""
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT sent_at, total_sent, total_failed, message
-            FROM broadcasts
-            ORDER BY sent_at DESC
-            LIMIT %s
-        """, (limit,))
-        stats = cursor.fetchall()
-        cursor.close()
+        response = supabase.table('broadcasts').select('sent_at, total_sent, total_failed, message').order('sent_at', desc=True).limit(limit).execute()
         
         return [
             {
-                'sent_at': str(row[0]),
-                'total_sent': row[1],
-                'total_failed': row[2],
-                'message': row[3]
+                'sent_at': str(row['sent_at']),
+                'total_sent': row['total_sent'],
+                'total_failed': row['total_failed'],
+                'message': row['message']
             }
-            for row in stats
-        ]
+            for row in response.data
+        ] if response.data else []
     except Exception as e:
         logger.error(f"❌ Ошибка получения статистики: {e}")
         return []
