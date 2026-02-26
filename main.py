@@ -130,6 +130,127 @@ async def admin_stats(message: types.Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
 
+# =====================================================
+# 📢 РАССЫЛКА ПОЛЬЗОВАТЕЛЯМ
+# =====================================================
+
+@dp.message(Command("broadcast"))
+async def admin_broadcast(message: types.Message):
+    """
+    Начало рассылки (только для админа)
+    Использование: /broadcast Текст сообщения
+    """
+    if message.from_user.id != config.ADMIN_ID:
+        await message.reply("❌ Доступ запрещён")
+        return
+    
+    # Получаем текст сообщения после команды
+    text = message.text.replace("/broadcast", "").strip()
+    
+    if not text:
+        await message.reply(
+            "❌ Введите текст рассылки!\n\n"
+            "Пример: /broadcast 🎁 Новые промокоды уже в боте!"
+        )
+        return
+    
+    # Отправляем сообщение на подтверждение
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Отправить", callback_data="broadcast_confirm")
+    builder.button(text="❌ Отмена", callback_data="broadcast_cancel")
+    builder.adjust(2)
+    
+    # Сохраняем текст в состоянии (через Redis или в памяти)
+    # Для простоты используем глобальную переменную
+    global broadcast_message
+    broadcast_message = text
+    
+    await message.reply(
+        f"📢 **Подтверждение рассылки**\n\n"
+        f"📝 Текст:\n{text}\n\n"
+        f"👥 Получателей: ~{db.get_total_users()}\n\n"
+        f"Отправить?",
+        reply_markup=builder.as_markup(),
+        parse_mode="Markdown"
+    )
+
+@dp.callback_query(F.data == "broadcast_confirm")
+async def broadcast_confirm(callback: types.CallbackQuery):
+    """Подтверждение и отправка рассылки"""
+    global broadcast_message
+    
+    if not broadcast_message:
+        await callback.answer("❌ Сообщение не найдено", show_alert=True)
+        return
+    
+    await callback.answer("🚀 Начинаю рассылку...")
+    await callback.message.edit_text("🚀 **Рассылка началась...**\n\nПодождите, это может занять несколько минут.")
+    
+    # Получаем всех пользователей
+    users = db.get_all_users()  # Нужно добавить эту функцию в database.py
+    
+    total = len(users)
+    sent = 0
+    failed = 0
+    
+    # Отправляем каждому пользователю
+    for user in users:
+        try:
+            await bot.send_message(
+                chat_id=user['user_id'],
+                text=broadcast_message,
+                parse_mode="HTML"
+            )
+            sent += 1
+            await asyncio.sleep(0.1)  # Пауза чтобы не заблокировали
+        except Exception as e:
+            failed += 1
+            logger.error(f"❌ Не удалось отправить {user['user_id']}: {e}")
+    
+    # Сохраняем в базу
+    db.add_broadcast(
+        message=broadcast_message,
+        sent_by=callback.from_user.id,
+        total_sent=sent,
+        total_failed=failed
+    )
+    
+    await callback.message.edit_text(
+        f"✅ **Рассылка завершена!**\n\n"
+        f"📤 Отправлено: {sent}\n"
+        f"❌ Ошибок: {failed}\n"
+        f"👥 Всего: {total}"
+    )
+    
+    broadcast_message = None
+
+@dp.callback_query(F.data == "broadcast_cancel")
+async def broadcast_cancel(callback: types.CallbackQuery):
+    """Отмена рассылки"""
+    global broadcast_message
+    broadcast_message = None
+    await callback.answer("❌ Рассылка отменена", show_alert=True)
+    await callback.message.delete()
+
+@dp.message(Command("broadcast_stats"))
+async def broadcast_stats(message: types.Message):
+    """Статистика рассылок (только для админа)"""
+    if message.from_user.id != config.ADMIN_ID:
+        return
+    
+    try:
+        stats = db.get_broadcast_stats()
+        
+        text = "📊 **Статистика рассылок**\n\n"
+        for broadcast in stats[:10]:  # Последние 10
+            text += f"📅 {broadcast['sent_at'][:10]}\n"
+            text += f"📤 Отправлено: {broadcast['total_sent']}\n"
+            text += f"❌ Ошибок: {broadcast['total_failed']}\n\n"
+        
+        await message.reply(text)
+    except Exception as e:
+        await message.reply(f"❌ Ошибка: {e}")
+
 @dp.message(Command("analytics"))
 async def show_analytics(message: types.Message):
     """Показывает аналитику из Supabase (только для админа)"""
@@ -239,6 +360,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
