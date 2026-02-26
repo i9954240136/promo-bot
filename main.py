@@ -53,12 +53,14 @@ async def cmd_start(message: types.Message):
 @dp.callback_query(F.data == "contact_author")
 async def contact_author(callback: types.CallbackQuery):
     """Обработка кнопки 'Связь с автором'"""
-    await callback.answer(
+    # Сначала закрываем callback (без текста)
+    await callback.answer()
+    
+    # Отправляем отдельное сообщение с контактом
+    await callback.message.answer(
         "📬 Написать автору можно в личный Telegram:\n\n"
-        "👤 <a href='https://t.me/chevengur92'>@chevengur92</a>\n\n"
-        "✉️ Я всегда отвечаю в течение 24 часов!",
-        show_alert=True,
-        parse_mode="HTML"  # ← ВКЛЮЧАЕМ HTML-РАЗМЕТКУ
+        "👤 @chevengur92\n\n"
+        "✉️ Я всегда отвечаю в течение 24 часов!"
     )
 
 @dp.message(Command("add_cat"))
@@ -237,5 +239,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
