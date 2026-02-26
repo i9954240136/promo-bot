@@ -38,19 +38,26 @@ async def cmd_start(message: types.Message):
         logger.error(f"❌ Ошибка: {e}")
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🎁 Открыть каталог", web_app=WebAppInfo(url=config.WEBAPP_URL))
-    builder.button(text="ℹ️ О проекте", callback_data="about")
+    builder.button(text="📖 Открыть каталог", web_app=WebAppInfo(url=config.WEBAPP_URL))
+    builder.button(text="📞 Связь с автором", callback_data="contact_author")
+    builder.adjust(1)  # Кнопки в 1 столбец
     
     await message.answer(
-        f"👋 Привет! Бот работает!\n\nНажми кнопку ниже 👇",
+        "👋 Привет! Добро пожаловать в <b>Promo Bot</b>!\n\n"
+        "🎁 Здесь вы найдёте лучшие промокоды и скидки от популярных брендов!\n\n"
+        "📖 Нажмите «Открыть каталог», чтобы начать!",
         reply_markup=builder.as_markup()
     )
 
-@dp.callback_query(F.data == "about")
-async def show_about(callback: types.CallbackQuery):
-    """Обработка кнопки 'О проекте'"""
-    await callback.answer()
-    await callback.message.edit_text("📱 Promo Bot работает!")
+@dp.callback_query(F.data == "contact_author")
+async def contact_author(callback: types.CallbackQuery):
+    """Обработка кнопки 'Связь с автором'"""
+    await callback.answer(
+        "📬 Написать автору можно в личный Telegram:\n\n"
+        "👤 @chevengur92\n\n"
+        "✉️ Я всегда отвечаю в течение 24 часов!",
+        show_alert=True
+    )
 
 @dp.message(Command("add_cat"))
 async def admin_add_cat(message: types.Message):
@@ -228,3 +235,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
