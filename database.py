@@ -7,8 +7,8 @@ from supabase import create_client, Client
 logger = logging.getLogger(__name__)
 
 # Инициализация Supabase
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY')
+SUPABASE_URL = "https://yfvvsbcvrwvahmceutvi.supabase.co"  # ← Ваш URL
+SUPABASE_KEY = os.environ.get('SUPABASE_SERVICE_KEY')  # ← SERVICE KEY из Render!
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def init_db():
@@ -219,3 +219,4 @@ def get_broadcast_stats(limit=10):
     except Exception as e:
         logger.error(f"❌ Ошибка получения статистики: {e}")
         return []
+
