@@ -162,3 +162,72 @@ def get_user_actions(user_id, limit=50):
     except Exception as e:
         print(f"❌ Ошибка: {e}")
         return []
+
+# =====================================================
+# 📢 ФУНКЦИИ ДЛЯ РАССЫЛОК
+# =====================================================
+
+def get_all_users():
+    """Получить всех пользователей для рассылки"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT user_id, username, first_name 
+            FROM users 
+            ORDER BY created_at DESC
+        """)
+        users = cursor.fetchall()
+        cursor.close()
+        
+        return [
+            {
+                'user_id': row[0],
+                'username': row[1],
+                'first_name': row[2]
+            }
+            for row in users
+        ]
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения пользователей: {e}")
+        return []
+
+def add_broadcast(message, sent_by, total_sent, total_failed):
+    """Сохранить рассылку в базу"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO broadcasts (message, sent_by, total_sent, total_failed)
+            VALUES (%s, %s, %s, %s)
+        """, (message, str(sent_by), total_sent, total_failed))
+        conn.commit()
+        cursor.close()
+        return True
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения рассылки: {e}")
+        return False
+
+def get_broadcast_stats(limit=10):
+    """Получить статистику рассылок"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT sent_at, total_sent, total_failed, message
+            FROM broadcasts
+            ORDER BY sent_at DESC
+            LIMIT %s
+        """, (limit,))
+        stats = cursor.fetchall()
+        cursor.close()
+        
+        return [
+            {
+                'sent_at': str(row[0]),
+                'total_sent': row[1],
+                'total_failed': row[2],
+                'message': row[3]
+            }
+            for row in stats
+        ]
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения статистики: {e}")
+        return []
